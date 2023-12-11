@@ -1,0 +1,65 @@
+---
+- name: Configure Azure AD authentication for Linux servers
+  hosts: "{{ target_servers }}"
+  become: yes
+
+  vars:
+    target_servers:
+      - server1
+      - server2
+      - server3
+
+  tasks:
+    - name: Install required packages
+      become: yes
+      yum:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - python3-pip
+        - adcli
+        - fail2ban
+      when: "'RedHat' in ansible_distribution"
+
+    - name: Install sssd package for CentOS
+      become: yes
+      yum:
+        name: sssd
+        state: present
+      when: "'CentOS' in ansible_distribution"
+
+    - name: Install required Python modules
+      become: yes
+      pip:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - pywinrm
+        - adal
+
+    - name: Configure Azure AD authentication
+      script: configure_azure_ad_authentication.sh
+      vars:
+        azure_tenant_id: "TENANT_ID"
+        azure_app_id: "APP_ID"
+        azure_app_secret: "APP_SECRET"
+      become: yes
+
+    - name: Install and configure Fail2Ban for Kibana/ElasticSearch
+      become: yes
+      template:
+        src: fail2ban.conf
+        dest: /etc/fail2ban/jail.d/fail2ban.conf
+      notify: Restart Fail2Ban
+
+  handlers:
+    - name: Restart the sssd service
+      service:
+        name: sssd
+        state: restarted
+      when: "'RedHat' in ansible_distribution or 'CentOS' in ansible_distribution"
+
+    - name: Restart Fail2Ban
+      service:
+        name: fail2ban
+        state: restarted
